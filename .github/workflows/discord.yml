@@ -1,18 +1,99 @@
-name: Nexus Mods API Test
+name: Nexus Mods PalEdit Monitor
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: write
 
 jobs:
-  test:
+  check-paledit:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check PalEdit on Nexus Mods
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check PalEdit
+        id: check
         env:
           NEXUS_API_KEY: ${{ secrets.NEXUS_API_KEY }}
         run: |
-          curl -i \
+          set -e
+
+          API_URL="https://api.nexusmods.com/v1/games/palworld/mods/104.json"
+
+          RESPONSE=$(curl -fsS \
             -H "apikey: ${NEXUS_API_KEY}" \
             -H "Accept: application/json" \
-            "https://api.nexusmods.com/v1/games/palworld/mods/104.json"
+            "$API_URL")
+
+          VERSION=$(echo "$RESPONSE" | jq -r '.version')
+          UPDATED_TIMESTAMP=$(echo "$RESPONSE" | jq -r '.updated_timestamp')
+          MOD_NAME=$(echo "$RESPONSE" | jq -r '.name')
+
+          echo "Mod: $MOD_NAME"
+          echo "Version: $VERSION"
+          echo "Updated timestamp: $UPDATED_TIMESTAMP"
+
+          if [ -f paledit_state.txt ]; then
+            LAST_VERSION=$(sed -n '1p' paledit_state.txt)
+            LAST_TIMESTAMP=$(sed -n '2p' paledit_state.txt)
+          else
+            LAST_VERSION=""
+            LAST_TIMESTAMP=""
+          fi
+
+          echo "Previous version: $LAST_VERSION"
+          echo "Previous timestamp: $LAST_TIMESTAMP"
+
+          if [ -z "$LAST_VERSION" ]; then
+            echo "$VERSION" > paledit_state.txt
+            echo "$UPDATED_TIMESTAMP" >> paledit_state.txt
+
+            echo "first_run=true" >> "$GITHUB_OUTPUT"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+
+          elif [ "$VERSION" != "$LAST_VERSION" ] || [ "$UPDATED_TIMESTAMP" != "$LAST_TIMESTAMP" ]; then
+            echo "$VERSION" > paledit_state.txt
+            echo "$UPDATED_TIMESTAMP" >> paledit_state.txt
+
+            echo "first_run=false" >> "$GITHUB_OUTPUT"
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "mod_name=$MOD_NAME" >> "$GITHUB_OUTPUT"
+            echo "updated_timestamp=$UPDATED_TIMESTAMP" >> "$GITHUB_OUTPUT"
+
+          else
+            echo "first_run=false" >> "$GITHUB_OUTPUT"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit state
+        if: steps.check.outputs.updated == 'true' || steps.check.outputs.first_run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add paledit_state.txt
+
+          if git diff --cached --quiet; then
+            echo "No state changes."
+          else
+            git commit -m "Update PalEdit monitoring state"
+            git push
+          fi
+
+      - name: Send Discord notification
+        if: steps.check.outputs.updated == 'true'
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ steps.check.outputs.version }}
+          MOD_NAME: ${{ steps.check.outputs.mod_name }}
+        run: |
+          curl -fsS \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"🎮 **${MOD_NAME} が更新されました！**\\n\\nバージョン: **${VERSION}**\\nhttps://www.nexusmods.com/palworld/mods/104\"}" \
+            "$WEBHOOK_URL"
