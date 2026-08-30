@@ -32,15 +32,12 @@ jobs:
 
           VERSION=$(echo "$RESPONSE" | jq -r '.version')
           UPDATED_TIMESTAMP=$(echo "$RESPONSE" | jq -r '.updated_timestamp')
+          UPDATED_TIME=$(echo "$RESPONSE" | jq -r '.updated_time')
           MOD_NAME=$(echo "$RESPONSE" | jq -r '.name')
 
           echo "Mod: $MOD_NAME"
           echo "Version: $VERSION"
-          echo "Updated timestamp: $UPDATED_TIMESTAMP"
-          
-          echo "===== Nexus API Response ====="
-          echo "$RESPONSE"
-          echo "=============================="
+          echo "Updated time: $UPDATED_TIME"
 
           if [ -f paledit_state.txt ]; then
             LAST_VERSION=$(sed -n '1p' paledit_state.txt)
@@ -68,7 +65,7 @@ jobs:
             echo "updated=true" >> "$GITHUB_OUTPUT"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "mod_name=$MOD_NAME" >> "$GITHUB_OUTPUT"
-            echo "updated_timestamp=$UPDATED_TIMESTAMP" >> "$GITHUB_OUTPUT"
+            echo "updated_time=$UPDATED_TIME" >> "$GITHUB_OUTPUT"
 
           else
             echo "first_run=false" >> "$GITHUB_OUTPUT"
@@ -96,8 +93,9 @@ jobs:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VERSION: ${{ steps.check.outputs.version }}
           MOD_NAME: ${{ steps.check.outputs.mod_name }}
+          UPDATED_TIME: ${{ steps.check.outputs.updated_time }}
         run: |
           curl -fsS \
             -H "Content-Type: application/json" \
-            -d "{\"content\":\"🎮 **${MOD_NAME} が更新されました！**\\n\\nバージョン: **${VERSION}**\\nhttps://www.nexusmods.com/palworld/mods/104\"}" \
+            -d "{\"content\":\"🎮 **${MOD_NAME} が更新されました！**\\n\\nバージョン: **${VERSION}**\\n更新日時: **${UPDATED_TIME}**\\n\\nhttps://www.nexusmods.com/palworld/mods/104\"}" \
             "$WEBHOOK_URL"
