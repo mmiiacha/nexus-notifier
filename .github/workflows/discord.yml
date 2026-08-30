@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check PalEdit
         id: check
@@ -51,6 +51,7 @@ jobs:
           echo "Previous timestamp: $LAST_TIMESTAMP"
 
           if [ -z "$LAST_VERSION" ]; then
+
             echo "$VERSION" > paledit_state.txt
             echo "$UPDATED_TIMESTAMP" >> paledit_state.txt
 
@@ -58,6 +59,7 @@ jobs:
             echo "updated=false" >> "$GITHUB_OUTPUT"
 
           elif [ "$VERSION" != "$LAST_VERSION" ] || [ "$UPDATED_TIMESTAMP" != "$LAST_TIMESTAMP" ]; then
+
             echo "$VERSION" > paledit_state.txt
             echo "$UPDATED_TIMESTAMP" >> paledit_state.txt
 
@@ -68,8 +70,10 @@ jobs:
             echo "updated_time=$UPDATED_TIME" >> "$GITHUB_OUTPUT"
 
           else
+
             echo "first_run=false" >> "$GITHUB_OUTPUT"
             echo "updated=false" >> "$GITHUB_OUTPUT"
+
           fi
 
       - name: Commit state
@@ -95,7 +99,18 @@ jobs:
           MOD_NAME: ${{ steps.check.outputs.mod_name }}
           UPDATED_TIME: ${{ steps.check.outputs.updated_time }}
         run: |
+          MESSAGE=$(jq -n \
+            --arg mod "$MOD_NAME" \
+            --arg version "$VERSION" \
+            --arg updated "$UPDATED_TIME" \
+            '{
+              content: ("🎮 **" + $mod + " が更新されました！**\n\n" +
+                        "バージョン: **" + $version + "**\n" +
+                        "更新日時: **" + $updated + "**\n\n" +
+                        "https://www.nexusmods.com/palworld/mods/104")
+            }')
+
           curl -fsS \
             -H "Content-Type: application/json" \
-            -d "{\"content\":\"🎮 **${MOD_NAME} が更新されました！**\\n\\nバージョン: **${VERSION}**\\n更新日時: **${UPDATED_TIME}**\\n\\nhttps://www.nexusmods.com/palworld/mods/104\"}" \
+            -d "$MESSAGE" \
             "$WEBHOOK_URL"
