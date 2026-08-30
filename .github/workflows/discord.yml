@@ -1,22 +1,18 @@
-name: Discord Notification
+name: Nexus Mods API Test
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
-  notify:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send Discord notification
+      - name: Check PalEdit on Nexus Mods
         env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          TAG_NAME: ${{ github.event.release.tag_name }}
+          NEXUS_API_KEY: ${{ secrets.NEXUS_API_KEY }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\":\"🎮 PalEditが更新されました！\\n\\n**${RELEASE_NAME}**\\nバージョン: ${TAG_NAME}\\n${RELEASE_URL}\"}" \
-            "$WEBHOOK_URL"
+          curl -i \
+            -H "apikey: ${NEXUS_API_KEY}" \
+            -H "Accept: application/json" \
+            "https://api.nexusmods.com/v1/games/palworld/mods/104.json"
