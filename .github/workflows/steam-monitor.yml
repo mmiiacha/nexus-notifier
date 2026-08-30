@@ -1,0 +1,191 @@
+name: Steam Game Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  check-steam-games:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check Steam games
+        id: check
+        run: |
+          set -e
+
+          # ==============================
+          # Palworld
+          # ==============================
+
+          PALWORLD_URL="https://steamdb.info/app/1623730/depots/"
+
+          PALWORLD_PAGE=$(curl -fsSL \
+            -A "Mozilla/5.0" \
+            "$PALWORLD_URL")
+
+          PALWORLD_BUILD=$(echo "$PALWORLD_PAGE" | \
+            grep -oP 'public.*?Build ID.*?\K[0-9]{7,}' | \
+            head -1 || true)
+
+          echo "Palworld Build ID: $PALWORLD_BUILD"
+
+          if [ -z "$PALWORLD_BUILD" ]; then
+            echo "Failed to get Palworld Build ID"
+            exit 1
+          fi
+
+
+          # ==============================
+          # SurrounDead
+          # ==============================
+
+          SURROUND_URL="https://steamdb.info/app/1645820/depots/"
+
+          SURROUND_PAGE=$(curl -fsSL \
+            -A "Mozilla/5.0" \
+            "$SURROUND_URL")
+
+          SURROUND_BUILD=$(echo "$SURROUND_PAGE" | \
+            grep -oP 'public.*?Build ID.*?\K[0-9]{7,}' | \
+            head -1 || true)
+
+          echo "SurrounDead Build ID: $SURROUND_BUILD"
+
+          if [ -z "$SURROUND_BUILD" ]; then
+            echo "Failed to get SurrounDead Build ID"
+            exit 1
+          fi
+
+
+          # ==============================
+          # Previous states
+          # ==============================
+
+          if [ -f palworld_state.txt ]; then
+            LAST_PALWORLD=$(cat palworld_state.txt)
+          else
+            LAST_PALWORLD=""
+          fi
+
+          if [ -f surroundead_state.txt ]; then
+            LAST_SURROUND=$(cat surroundead_state.txt)
+          else
+            LAST_SURROUND=""
+          fi
+
+          echo "Previous Palworld: $LAST_PALWORLD"
+          echo "Previous SurrounDead: $LAST_SURROUND"
+
+
+          # ==============================
+          # Palworld comparison
+          # ==============================
+
+          if [ -z "$LAST_PALWORLD" ]; then
+            echo "$PALWORLD_BUILD" > palworld_state.txt
+            echo "palworld_updated=false" >> "$GITHUB_OUTPUT"
+
+          elif [ "$PALWORLD_BUILD" != "$LAST_PALWORLD" ]; then
+            echo "$PALWORLD_BUILD" > palworld_state.txt
+
+            echo "palworld_updated=true" >> "$GITHUB_OUTPUT"
+            echo "palworld_build=$PALWORLD_BUILD" >> "$GITHUB_OUTPUT"
+
+          else
+            echo "palworld_updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+
+          # ==============================
+          # SurrounDead comparison
+          # ==============================
+
+          if [ -z "$LAST_SURROUND" ]; then
+            echo "$SURROUND_BUILD" > surroundead_state.txt
+            echo "surroundead_updated=false" >> "$GITHUB_OUTPUT"
+
+          elif [ "$SURROUND_BUILD" != "$LAST_SURROUND" ]; then
+            echo "$SURROUND_BUILD" > surroundead_state.txt
+
+            echo "surroundead_updated=true" >> "$GITHUB_OUTPUT"
+            echo "surroundead_build=$SURROUND_BUILD" >> "$GITHUB_OUTPUT"
+
+          else
+            echo "surroundead_updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+
+      # ==============================
+      # Save state
+      # ==============================
+
+      - name: Commit state
+        if: steps.check.outputs.palworld_updated == 'true' || steps.check.outputs.surroundead_updated == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add palworld_state.txt surroundead_state.txt
+
+          if git diff --cached --quiet; then
+            echo "No state changes."
+          else
+            git commit -m "Update Steam game monitoring state"
+            git push
+          fi
+
+
+      # ==============================
+      # Palworld Discord notification
+      # ==============================
+
+      - name: Notify Palworld
+        if: steps.check.outputs.palworld_updated == 'true'
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BUILD_ID: ${{ steps.check.outputs.palworld_build }}
+        run: |
+          MESSAGE=$(jq -n \
+            --arg build "$BUILD_ID" \
+            '{
+              content: ("🎮 **Palworld がアップデートされました！**\n\n" +
+                        "Steam Build ID: **" + $build + "**\n\n" +
+                        "https://store.steampowered.com/app/1623730/")
+            }')
+
+          curl -fsS \
+            -H "Content-Type: application/json" \
+            -d "$MESSAGE" \
+            "$WEBHOOK_URL"
+
+
+      # ==============================
+      # SurrounDead Discord notification
+      # ==============================
+
+      - name: Notify SurrounDead
+        if: steps.check.outputs.surroundead_updated == 'true'
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BUILD_ID: ${{ steps.check.outputs.surroundead_build }}
+        run: |
+          MESSAGE=$(jq -n \
+            --arg build "$BUILD_ID" \
+            '{
+              content: ("🧟 **SurrounDead がアップデートされました！**\n\n" +
+                        "Steam Build ID: **" + $build + "**\n\n" +
+                        "https://store.steampowered.com/app/1645820/")
+            }')
+
+          curl -fsS \
+            -H "Content-Type: application/json" \
+            -d "$MESSAGE" \
+            "$WEBHOOK_URL"
