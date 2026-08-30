@@ -1,0 +1,21 @@
+name: Discord Notification
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Discord notification
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d "{\"content\":\"🎮 PalEditが更新されました！\\n\\n**${RELEASE_NAME}**\\nバージョン: ${TAG_NAME}\\n${RELEASE_URL}\"}" \
+            "$WEBHOOK_URL"
