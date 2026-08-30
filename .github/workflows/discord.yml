@@ -37,6 +37,10 @@ jobs:
           echo "Mod: $MOD_NAME"
           echo "Version: $VERSION"
           echo "Updated timestamp: $UPDATED_TIMESTAMP"
+          
+          echo "===== Nexus API Response ====="
+          echo "$RESPONSE"
+          echo "=============================="
 
           if [ -f paledit_state.txt ]; then
             LAST_VERSION=$(sed -n '1p' paledit_state.txt)
